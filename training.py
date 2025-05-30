@@ -1,9 +1,12 @@
+from time import time
+from math import sqrt
 from numpy import float32
 import torch
 from torch import tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 from pytorch_lightning import seed_everything
 from sklearn.model_selection import train_test_split
+from matplotlib import pyplot as plt
 from raw_data_handler import extract_raw_data
 
 
@@ -11,11 +14,19 @@ class Network(nn.Module):
     def __init__(self):
         super(Network, self).__init__()
         self.activation = nn.ReLU()
-        self.linear1 = nn.Linear(8, 20)
-        self.linear_out = nn.Linear(20, 1)
+        # self.dropout_in = nn.Dropout(0.1)
+        self.linear1 = nn.Linear(8, 300)
+        # self.dropout1 = nn.Dropout(0.1)
+        self.linear2 = nn.Linear(300, 300)
+        # self.dropout2 = nn.Dropout(0.1)
+        self.linear_out = nn.Linear(300, 1)
 
     def forward(self, x):
+        # x = self.dropout_in(x)
         x = self.activation(self.linear1(x))
+        # x = self.dropout1(x)
+        x = self.activation(self.linear2(x))
+        # x = self.dropout2(x)
         return self.linear_out(x)
 
 
@@ -51,14 +62,67 @@ def train_one_epoch(model, training_dataloader, optimiser, criterion):
         optimiser.step()
         running_loss += loss.item()
 
-    return running_loss/len(training_dataloader.dataset)
+    return sqrt(running_loss/len(training_dataloader.dataset))
 
 
 def get_validation_loss(model, dataloader, criterion):
-    pass
+    """
+    Function to return the mean-squared error validation loss.
+    Called after completion of a training epoch.
+    """
+    model.eval()
+    running_vloss = 0.
+    count = 0
+    with torch.no_grad():
+        for vdata in dataloader:
+            v_features, v_responses = vdata
+            v_predictions = model(v_features)
+            vloss = criterion(v_predictions.squeeze(), v_responses)
+            running_vloss += vloss.item()
+
+        validation_loss = running_vloss/len(dataloader.dataset)
+
+    return sqrt(validation_loss)
+
+
+def plot_losses(losses, loss_type="Mean Squared Error"):
+    """
+    Plot progress of training and validation losses vs epoch number.
+    """
+    epochs = []
+    training_losses = []
+    validation_losses = []
+    for i in range(1, len(losses)):
+        epoch, training_loss, validation_loss = losses[i]
+        epochs.append(epoch)
+        training_losses.append(training_loss)
+        validation_losses.append(validation_loss)
+
+    plt.figure()
+    ax = plt.axes()
+    ax.scatter(epochs, training_losses, marker="o", label="Training")
+    ax.scatter(epochs, validation_losses, marker="x", label="Validation")
+
+    plt.xlabel("Epoch")
+    plt.ylabel(f"{loss_type} Loss")
+    plt.legend(loc="upper right")
+    plt.show()
+
+
+def print_timing(start_time):
+    total_time = time()-start_time
+    hours = int(total_time//3600)
+    total_time -= hours * 3600
+    minutes = int(total_time // 60)
+    total_time -= minutes * 60
+    seconds = int(total_time)
+    print(f"Time taken: {hours}h {minutes}m {seconds}s")
+    return
 
 
 def train_model(training_dataloader, validation_dataloader):
+    start_time = time()
+
     model = Network()
     criterion = nn.MSELoss(reduction="sum")
     optimiser = torch.optim.SGD(model.parameters(),
@@ -66,7 +130,7 @@ def train_model(training_dataloader, validation_dataloader):
                                 weight_decay=0.,
                                 momentum=0.)
 
-    EPOCHS = 1_001
+    EPOCHS = 40_001
     loss_tracker = []
     min_training_loss = 1.e9
     min_validation_loss = 1.e9
@@ -85,7 +149,7 @@ def train_model(training_dataloader, validation_dataloader):
             min_training_loss_epoch = epoch
 
         if validation_loss < min_validation_loss:
-            min_validation_loss = training_loss
+            min_validation_loss = validation_loss
             min_validation_loss_epoch = epoch
 
         print(f"Epoch: {epoch}, Training Loss: {training_loss:14.12f}, "
@@ -96,10 +160,17 @@ def train_model(training_dataloader, validation_dataloader):
                                  training_loss,
                                  validation_loss))
 
+    # Print summary messages after training.
     print(f"Minimum Training Loss: {min_training_loss:14.12f} "
           f"at epoch {min_training_loss_epoch}")
     print(f"Minimum Validation Loss: {min_validation_loss:14.12f} "
           f"at epoch {min_validation_loss_epoch}")
+
+    # Final training timing
+    print_timing(start_time)
+
+    # Plot progress of losses
+    plot_losses(loss_tracker)
 
 
 if __name__ == "__main__":
@@ -125,7 +196,7 @@ if __name__ == "__main__":
      training_responses,
      validation_responses) = train_test_split(data_features,
                                               data_responses,
-                                              test_size=0.2,
+                                              test_size=0.1,
                                               random_state=1)
 
     # Create DataSets
