@@ -15,11 +15,11 @@ class Network(nn.Module):
         super(Network, self).__init__()
         self.activation = nn.ReLU()
         # self.dropout_in = nn.Dropout(0.1)
-        self.linear1 = nn.Linear(8, 300)
+        self.linear1 = nn.Linear(8, 400)
         # self.dropout1 = nn.Dropout(0.1)
-        self.linear2 = nn.Linear(300, 300)
+        self.linear2 = nn.Linear(400, 400)
         # self.dropout2 = nn.Dropout(0.1)
-        self.linear_out = nn.Linear(300, 1)
+        self.linear_out = nn.Linear(400, 1)
 
     def forward(self, x):
         # x = self.dropout_in(x)
@@ -126,11 +126,11 @@ def train_model(training_dataloader, validation_dataloader):
     model = Network()
     criterion = nn.MSELoss(reduction="sum")
     optimiser = torch.optim.SGD(model.parameters(),
-                                lr=1.e-8,
+                                lr=2.e-7,
                                 weight_decay=0.,
                                 momentum=0.)
 
-    EPOCHS = 40_001
+    EPOCHS = 4_01
     loss_tracker = []
     min_training_loss = 1.e9
     min_validation_loss = 1.e9
@@ -160,17 +160,31 @@ def train_model(training_dataloader, validation_dataloader):
                                  training_loss,
                                  validation_loss))
 
-    # Print summary messages after training.
-    print(f"Minimum Training Loss: {min_training_loss:14.12f} "
-          f"at epoch {min_training_loss_epoch}")
-    print(f"Minimum Validation Loss: {min_validation_loss:14.12f} "
-          f"at epoch {min_validation_loss_epoch}")
-
     # Final training timing
     print_timing(start_time)
 
+    # Return a dictionary of data summarising the training
+    return {"min_tloss": min_training_loss,
+            "min_tloss_epoch": min_training_loss_epoch,
+            "min_vloss": min_validation_loss,
+            "min_vloss_epoch": min_validation_loss_epoch,
+            "loss_tracker_list": loss_tracker}
+
+
+def summarise_training(training_summary):
+    """
+    Print summary of training.
+    Plot losses.
+    """
+
+    # Print summary messages after training.
+    print(f"Minimum Training Loss: {training_summary["min_tloss"]:14.12f} "
+          f"at epoch {training_summary["min_tloss_epoch"]}")
+    print(f"Minimum Validation Loss: {training_summary["min_vloss"]:14.12f} "
+          f"at epoch {training_summary["min_vloss_epoch"]}")
+
     # Plot progress of losses
-    plot_losses(loss_tracker)
+    plot_losses(training_summary["loss_tracker_list"])
 
 
 if __name__ == "__main__":
@@ -205,7 +219,7 @@ if __name__ == "__main__":
         validation_features, validation_responses)
 
     # Create training and validation DataLoaders
-    batch_size = 20
+    batch_size = 25
     training_dataloader = DataLoader(training_dataset,
                                      batch_size=batch_size,
                                      shuffle=True)
@@ -214,4 +228,7 @@ if __name__ == "__main__":
                                        shuffle=False)
 
     #  Train network
-    train_model(training_dataloader, validation_dataloader)
+    training_summary = train_model(training_dataloader, validation_dataloader)
+
+    # Summarise training
+    summarise_training(training_summary)
